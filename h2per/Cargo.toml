@@ -1,0 +1,25 @@
+[package]
+name = "h2per"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Hyper-powered HTTP protocol integration for the Hotaru framework"
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/Field-of-Dreams-Studio/hotaru"
+homepage = "https://hotaru.rs"
+keywords = ["hotaru", "hyper", "http", "http2", "web"]
+categories = ["network-programming", "web-programming::http-server", "asynchronous"]
+
+[dependencies]
+bytes = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1", "http2", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+hotaru_core = { path = "../hotaru_core", version = "=0.8.6", default-features = false, features = ["std", "spawn_send", "full_regex"] }
+hotaru_io_tokio = { path = "../hotaru_io_tokio", version = "=0.8.6", default-features = false, features = ["std"] }
+tokio = { version = "1.28", features = ["io-util", "net", "rt", "sync"] }
+
+[dev-dependencies]
+hotaru = { path = "../hotaru", version = "=0.8.6", default-features = false, features = ["full_regex", "tokio"] }
+tokio = { version = "1.28", features = ["macros", "net", "rt-multi-thread", "sync", "time"] }

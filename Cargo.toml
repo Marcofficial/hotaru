@@ -18,6 +18,8 @@ members = [
 
     "htmstd",
     # "hotaru_grpc",
+    "h2per",
+    "h2per/example",
 
     "examples/multi_protocol_example",
     "examples/example_hotaru",
@@ -55,6 +57,7 @@ default-members = [
     "hotaru_lib",
     "ahttpm",
     "htmstd",
+    "h2per",
     "examples/example_hotaru",
     "examples/combine_example",
     "examples/api_registration_example",

@@ -1,0 +1,10 @@
+[package]
+name = "h2per-example"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+h2per = { path = ".." }
+hotaru = { path = "../../hotaru", version = "=0.8.6", default-features = false, features = ["trans", "tokio", "full_regex"] }
+
