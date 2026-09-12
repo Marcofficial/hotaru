@@ -22,7 +22,8 @@ use crate::{
     context::HttpContext,
     protocol::{
         error::HttpError,
-        helpers::{error_response_from, not_found_response},
+        helpers::{closing_error_response, error_response_from, not_found_response},
+        version::ensure_http1_version,
     },
     security::safety::HttpSafety,
 };
@@ -179,11 +180,21 @@ where
         let request = match channel.parse_request(channel.safety()).await {
             Ok(request) => request,
             Err(error) if matches!(&error, HttpError::Meta(_) | HttpError::Body(_)) => {
-                channel.send_response(error_response_from(&error)).await?;
+                channel
+                    .send_response(closing_error_response(&error))
+                    .await?;
                 return Ok(ProtocolFlow::Close);
             }
             Err(error) => return Err(error),
         };
+
+        if let Err(error) = ensure_http1_version(request.meta.start_line.http_version()) {
+            channel
+                .send_response(closing_error_response(&error))
+                .await?;
+            return Ok(ProtocolFlow::Close);
+        }
+
         let keep_alive = request.is_keep_alive();
 
         // 2. Walk URL tree.
@@ -287,7 +298,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message::http_value::StatusCode;
 
     #[test]
     fn test_http1_detection() {
@@ -296,12 +306,6 @@ mod tests {
         assert!(HTTP::detect(b"PUT /resource HTTP/1.1\r\n"));
         assert!(!HTTP::detect(b"INVALID REQUEST\r\n"));
         assert!(!HTTP::detect(b""));
-    }
-
-    #[test]
-    fn test_not_found_response() {
-        let resp = not_found_response();
-        assert_eq!(resp.meta.start_line.status_code(), StatusCode::NOT_FOUND);
     }
 
     #[test]

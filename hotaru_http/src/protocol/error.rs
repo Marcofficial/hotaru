@@ -4,7 +4,7 @@ use hotaru_core::protocol::ProtocolError;
 
 use crate::message::body::BodyError;
 use crate::message::header::HeaderError;
-use crate::message::http_value::StatusCode;
+use crate::message::http_value::{HttpVersion, StatusCode};
 use crate::message::meta::MetaError;
 use crate::message::start_line::StartLineError;
 use crate::util::connection::ConnectionError;
@@ -33,6 +33,8 @@ pub enum HttpError {
     NoRoute(String),
     /// The request exceeded its deadline.
     Timeout,
+    /// The parsed HTTP version is not supported by the active protocol.
+    VersionNotSupported(HttpVersion),
     /// The handler explicitly returned a status as an error.
     Status(StatusCode),
 }
@@ -46,6 +48,10 @@ impl fmt::Display for HttpError {
             Self::MethodNotAllowed => formatter.write_str("method not allowed"),
             Self::NoRoute(path) => write!(formatter, "no route matched path: {path}"),
             Self::Timeout => formatter.write_str("request timed out"),
+            Self::VersionNotSupported(version) => write!(
+                formatter,
+                "HTTP version {version} is not supported by this protocol"
+            ),
             Self::Status(code) => write!(formatter, "HTTP status error: {code:?}"),
         }
     }
@@ -154,7 +160,7 @@ impl ProtocolError for HttpError {
             Self::Meta(error) => error.can_continue(),
             Self::Body(error) => error.can_continue(),
             // Transport is dead.
-            Self::Io(_) => false,
+            Self::Io(_) | Self::VersionNotSupported(_) => false,
             // Everything else: send a response and keep the socket.
             _ => true,
         }
@@ -176,7 +182,24 @@ impl From<&HttpError> for StatusCode {
             HttpError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             HttpError::NoRoute(_) => StatusCode::NOT_FOUND,
             HttpError::Timeout => StatusCode::REQUEST_TIMEOUT,
+            HttpError::VersionNotSupported(_) => StatusCode::HTTP_VERSION_NOT_SUPPORTED,
             HttpError::Status(code) => code.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn unsupported_protocol_version_maps_to_505_and_closes() {
+        let error = HttpError::VersionNotSupported(HttpVersion::Http20);
+
+        assert_eq!(
+            StatusCode::from(&error),
+            StatusCode::HTTP_VERSION_NOT_SUPPORTED
+        );
+        assert!(!error.can_continue());
     }
 }

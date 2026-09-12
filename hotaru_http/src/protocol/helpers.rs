@@ -2,9 +2,9 @@
 
 use hotaru_core::protocol::ProtocolError;
 
-use crate::message::http_value::StatusCode; 
+use crate::message::http_value::StatusCode;
 use crate::message::response::{HttpResponse, response_templates};
-use crate::protocol::error::HttpError; 
+use crate::protocol::error::HttpError;
 
 /// Build a minimal HTML error page body for the given status code.
 ///
@@ -63,8 +63,7 @@ pub fn error_response_from(err: &dyn ProtocolError) -> HttpResponse {
     // Try to downcast to HttpError for fine-grained status mapping.
     // ProtocolError: std::error::Error + Send + Sync + 'static, so we can
     // downcast through the std::error::Error vtable.
-    let status = if let Some(http_err) =
-        (err as &dyn std::error::Error).downcast_ref::<HttpError>()
+    let status = if let Some(http_err) = (err as &dyn std::error::Error).downcast_ref::<HttpError>()
     {
         http_err.into()
     } else {
@@ -72,4 +71,40 @@ pub fn error_response_from(err: &dyn ProtocolError) -> HttpResponse {
         StatusCode::INTERNAL_SERVER_ERROR
     };
     html_status_response(status)
+}
+
+/// Build an error response for a branch that will close the connection.
+///
+/// Keeping the header and [`ProtocolFlow::Close`](hotaru_core::protocol::ProtocolFlow::Close)
+/// decision aligned prevents an HTTP/1.1 peer from treating the response as
+/// persistent while the server is already tearing the channel down.
+pub(crate) fn closing_error_response(err: &dyn ProtocolError) -> HttpResponse {
+    error_response_from(err).add_header("connection", "close")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::message::http_value::HttpVersion;
+
+    #[test]
+    fn not_found_response_has_404_status() {
+        let response = not_found_response();
+        assert_eq!(
+            response.meta.start_line.status_code(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[test]
+    fn closing_version_error_response_has_505_status_and_close_header() {
+        let error = HttpError::VersionNotSupported(HttpVersion::Http30);
+        let response = closing_error_response(&error);
+
+        assert_eq!(
+            response.meta.start_line.status_code(),
+            StatusCode::HTTP_VERSION_NOT_SUPPORTED
+        );
+        assert!(response.meta.represent().contains("connection: close\r\n"));
+    }
 }
