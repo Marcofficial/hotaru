@@ -6,13 +6,15 @@ use hotaru_core::{
     protocol::{Protocol, ProtocolFlow},
     url::UrlRoot,
 };
-use hotaru_http::{HTTP, safety::HttpSafety};
 use hotaru_io_tokio::TcpStream as HotaruTcpStream;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     time::{Duration, timeout},
 };
+
+use super::HTTP;
+use crate::security::safety::HttpSafety;
 
 struct ExchangeResult {
     response: Vec<u8>,
