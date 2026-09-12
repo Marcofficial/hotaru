@@ -1,7 +1,5 @@
 //! Helper functions for the HTTP/1 protocol handle loop.
 
-use hotaru_core::protocol::ProtocolError;
-
 use crate::message::http_value::StatusCode;
 use crate::message::response::{HttpResponse, response_templates};
 use crate::protocol::error::HttpError;
@@ -34,7 +32,7 @@ pub fn not_found_response() -> HttpResponse {
     html_status_response(StatusCode::NOT_FOUND)
 }
 
-/// Build an error response from a boxed protocol error with an HTML `<h1>`
+/// Build an error response from an HTTP error with an HTML `<h1>`
 /// body carrying the resolved status code and reason phrase.
 ///
 /// Maps each `HttpError` variant to the most appropriate HTTP status code:
@@ -59,18 +57,8 @@ pub fn not_found_response() -> HttpResponse {
 /// | `Meta(StartLine(UnsupportedHttpVersion))` | 505 HTTP Version Not Supported |
 /// | `ProtocolViolation` | 400 Bad Request |
 /// | `Other` | 500 Internal Server Error |
-pub fn error_response_from(err: &dyn ProtocolError) -> HttpResponse {
-    // Try to downcast to HttpError for fine-grained status mapping.
-    // ProtocolError: std::error::Error + Send + Sync + 'static, so we can
-    // downcast through the std::error::Error vtable.
-    let status = if let Some(http_err) = (err as &dyn std::error::Error).downcast_ref::<HttpError>()
-    {
-        http_err.into()
-    } else {
-        // Fallback: generic 500 for non-HttpError protocol errors.
-        StatusCode::INTERNAL_SERVER_ERROR
-    };
-    html_status_response(status)
+pub fn error_response_from(err: &HttpError) -> HttpResponse {
+    html_status_response(err.into())
 }
 
 /// Build an error response for a branch that will close the connection.
@@ -78,7 +66,7 @@ pub fn error_response_from(err: &dyn ProtocolError) -> HttpResponse {
 /// Keeping the header and [`ProtocolFlow::Close`](hotaru_core::protocol::ProtocolFlow::Close)
 /// decision aligned prevents an HTTP/1.1 peer from treating the response as
 /// persistent while the server is already tearing the channel down.
-pub(crate) fn closing_error_response(err: &dyn ProtocolError) -> HttpResponse {
+pub(crate) fn closing_error_response(err: &HttpError) -> HttpResponse {
     error_response_from(err).add_header("connection", "close")
 }
 
