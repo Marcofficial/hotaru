@@ -56,7 +56,7 @@ pub fn not_found_response() -> HttpResponse {
 /// | `Status(code)` | The wrapped status code |
 /// | `NoRoute` | 404 Not Found |
 /// | `Timeout` | 408 Request Timeout |
-/// | `VersionNotSupported` | 505 HTTP Version Not Supported |
+/// | `Meta(StartLine(UnsupportedHttpVersion))` | 505 HTTP Version Not Supported |
 /// | `ProtocolViolation` | 400 Bad Request |
 /// | `Other` | 500 Internal Server Error |
 pub fn error_response_from(err: &dyn ProtocolError) -> HttpResponse {
@@ -85,7 +85,7 @@ pub(crate) fn closing_error_response(err: &dyn ProtocolError) -> HttpResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message::http_value::HttpVersion;
+    use crate::message::start_line::StartLineError;
 
     #[test]
     fn not_found_response_has_404_status() {
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn closing_version_error_response_has_505_status_and_close_header() {
-        let error = HttpError::VersionNotSupported(HttpVersion::Http30);
+        let error = HttpError::from(StartLineError::UnsupportedHttpVersion);
         let response = closing_error_response(&error);
 
         assert_eq!(

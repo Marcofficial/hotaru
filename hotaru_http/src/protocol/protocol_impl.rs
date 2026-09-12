@@ -189,6 +189,7 @@ where
         };
 
         if let Err(error) = ensure_http1_version(request.meta.start_line.http_version()) {
+            let error: HttpError = error.into();
             channel
                 .send_response(closing_error_response(&error))
                 .await?;

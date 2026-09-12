@@ -1,18 +1,17 @@
 //! Version capability policy for the HTTP/1 protocol implementation.
 
 use crate::message::http_value::HttpVersion;
-
-use super::error::HttpError;
+use crate::message::start_line::StartLineError;
 
 /// Require a version whose wire format is implemented by `Http1Protocol`.
 ///
 /// `HttpVersion` also represents versions used by other protocol
 /// implementations. Recognising one of those versions while parsing must not
 /// allow it to enter the HTTP/1 router.
-pub(super) fn ensure_http1_version(version: &HttpVersion) -> Result<(), HttpError> {
+pub(super) fn ensure_http1_version(version: &HttpVersion) -> Result<(), StartLineError> {
     match version {
         HttpVersion::Http10 | HttpVersion::Http11 => Ok(()),
-        other => Err(HttpError::VersionNotSupported(other.clone())),
+        _ => Err(StartLineError::UnsupportedHttpVersion),
     }
 }
 
@@ -36,7 +35,7 @@ mod tests {
         ] {
             assert!(matches!(
                 ensure_http1_version(&version),
-                Err(HttpError::VersionNotSupported(_))
+                Err(StartLineError::UnsupportedHttpVersion)
             ));
         }
     }
