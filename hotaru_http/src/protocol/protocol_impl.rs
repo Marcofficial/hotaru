@@ -20,10 +20,10 @@ use hotaru_io_tokio::TcpStream;
 use crate::{
     channel::{Http1Channel, HttpChannel},
     context::HttpContext,
+    message::{http_value::HttpVersion, start_line::StartLineError},
     protocol::{
         error::HttpError,
         helpers::{closing_error_response, error_response_from, not_found_response},
-        version::ensure_http1_version,
     },
     security::safety::HttpSafety,
 };
@@ -107,6 +107,18 @@ impl<W: ConnStream, TS: TransportSpec<Wire = W>> Http1Protocol<W, TS> {
     /// Borrows this protocol's safety baseline.
     pub fn safety(&self) -> &HttpSafety {
         &self.safety
+    }
+}
+
+/// Require a version whose wire format is implemented by `Http1Protocol`.
+///
+/// `HttpVersion` also represents versions used by other protocol
+/// implementations. Recognising one of those versions while parsing must not
+/// allow it to enter the HTTP/1 router.
+fn ensure_http1_version(version: &HttpVersion) -> Result<(), StartLineError> {
+    match version {
+        HttpVersion::Http10 | HttpVersion::Http11 => Ok(()),
+        _ => Err(StartLineError::UnsupportedHttpVersion),
     }
 }
 
@@ -307,6 +319,27 @@ mod tests {
         assert!(HTTP::detect(b"PUT /resource HTTP/1.1\r\n"));
         assert!(!HTTP::detect(b"INVALID REQUEST\r\n"));
         assert!(!HTTP::detect(b""));
+    }
+
+    #[test]
+    fn http_10_and_11_are_supported() {
+        assert!(ensure_http1_version(&HttpVersion::Http10).is_ok());
+        assert!(ensure_http1_version(&HttpVersion::Http11).is_ok());
+    }
+
+    #[test]
+    fn non_http1_versions_are_rejected() {
+        for version in [
+            HttpVersion::Http09,
+            HttpVersion::Http20,
+            HttpVersion::Http30,
+            HttpVersion::Unknown,
+        ] {
+            assert!(matches!(
+                ensure_http1_version(&version),
+                Err(StartLineError::UnsupportedHttpVersion)
+            ));
+        }
     }
 
     #[test]
