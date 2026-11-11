@@ -56,7 +56,7 @@ pub fn not_found_response() -> HttpResponse {
 /// | `Status(code)` | The wrapped status code |
 /// | `NoRoute` | 404 Not Found |
 /// | `Timeout` | 408 Request Timeout |
-/// | `VersionNotSupported` | 505 HTTP Version Not Supported |
+/// | `Meta(StartLine(UnsupportedHttpVersion))` | 505 HTTP Version Not Supported |
 /// | `ProtocolViolation` | 400 Bad Request |
 /// | `Other` | 500 Internal Server Error |
 pub fn error_response_from(err: &dyn ProtocolError) -> HttpResponse {

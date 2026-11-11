@@ -25,7 +25,9 @@ impl HttpMeta {
         }
 
         // Parse the start line according to whether it's a request or response
-        let start_line = Self::parse_start_line(&headers.remove(0), is_request);
+        let start_line = Self::parse_start_line(&headers.remove(0), is_request)
+            .map_err(MetaError::from)
+            .map_err(Streamed::Err)?;
 
         // Parse headers with special handling for specific header names
         let header = Self::parse_headers(headers, is_request);
@@ -144,11 +146,14 @@ impl HttpMeta {
     }
 
     // Helper function to parse the start line
-    fn parse_start_line(line: &str, is_request: bool) -> HttpStartLine {
+    fn parse_start_line(
+        line: &str,
+        is_request: bool,
+    ) -> Result<HttpStartLine, crate::message::start_line::StartLineError> {
         if is_request {
-            HttpStartLine::parse_request_or_default(line)
+            HttpStartLine::parse_request(line)
         } else {
-            HttpStartLine::parse_response_or_default(line)
+            HttpStartLine::parse_response(line)
         }
     }
 

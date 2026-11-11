@@ -179,7 +179,8 @@ where
         let request = match channel.parse_request(channel.safety()).await {
             Ok(request) => request,
             Err(error) if matches!(&error, HttpError::Meta(_) | HttpError::Body(_)) => {
-                channel.send_response(error_response_from(&error)).await?;
+                let response = error_response_from(&error).add_header("Connection", "close");
+                channel.send_response(response).await?;
                 return Ok(ProtocolFlow::Close);
             }
             Err(error) => return Err(error),

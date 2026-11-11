@@ -7,9 +7,10 @@
 
 #[cfg(test)]
 mod security_tests {
+    use crate::HttpError;
     use crate::message::body::HttpBody;
     use crate::message::http_value::HttpMethod;
-    use crate::message::meta::HttpMeta;
+    use crate::message::meta::{HttpMeta, MetaError};
     use crate::message::request::HttpRequest;
     use crate::message::start_line::{RequestStartLine, StartLineError};
     use crate::security::safety::HttpSafety;
@@ -88,19 +89,35 @@ mod security_tests {
     #[test]
     fn test_start_line_invalid_http_version() {
         let result = RequestStartLine::parse("GET /index.html HTTP/3.0");
-        assert!(result.is_ok());
-        let line = result.unwrap();
-        // HttpVersion::from_string accepts any version
-        assert_eq!(line.path, "/index.html");
+        assert!(matches!(
+            result,
+            Err(StartLineError::UnsupportedHttpVersion(version)) if version == "HTTP/3.0"
+        ));
     }
 
     #[test]
     fn test_start_line_malformed_http_version() {
         let result = RequestStartLine::parse("GET /index.html HTTPX");
-        assert!(result.is_ok());
-        let line = result.unwrap();
-        // HttpVersion doesn't have PartialEq, just check it parsed
-        assert_eq!(line.path, "/index.html");
+        assert!(matches!(
+            result,
+            Err(StartLineError::InvalidHttpVersion(version)) if version == "HTTPX"
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_wire_parser_does_not_default_a_malformed_start_line() {
+        let request = b"GET /index.html HTTPX\r\nHost: localhost\r\n\r\n";
+        let cursor = Cursor::new(request.to_vec());
+        let mut reader = TokioIo::new(BufReader::new(cursor));
+
+        let result = HttpRequest::parse_lazy(&mut reader, &HttpSafety::default(), false).await;
+
+        assert!(matches!(
+            result,
+            Err(HttpError::Meta(MetaError::StartLine(
+                StartLineError::InvalidHttpVersion(version)
+            ))) if version == "HTTPX"
+        ));
     }
 
     #[test]
