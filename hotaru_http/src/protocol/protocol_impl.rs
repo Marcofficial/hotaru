@@ -10,7 +10,9 @@ use std::sync::Arc;
 use hotaru_core::{
     app::common::RuntimeConfig,
     connection::{ConnStream, HotaruRead, HotaruWrite, Outbound, TransportSpec},
-    protocol::{Channel, CtxError, Protocol, ProtocolFlow, ProtocolRole, RequestContext},
+    protocol::{
+        Channel, CtxError, Protocol, ProtocolError, ProtocolFlow, ProtocolRole, RequestContext,
+    },
     url::UrlRoot,
 };
 use hotaru_io_tokio::TcpStream;
@@ -18,8 +20,10 @@ use hotaru_io_tokio::TcpStream;
 use crate::{
     channel::{Http1Channel, HttpChannel},
     context::HttpContext,
-    message::response::response_templates,
-    protocol::error::HttpError,
+    protocol::{
+        error::HttpError,
+        helpers::{error_response_from, not_found_response},
+    },
     security::safety::HttpSafety,
 };
 
@@ -175,29 +179,21 @@ where
         let request = match channel.parse_request(channel.safety()).await {
             Ok(request) => request,
             Err(error) if matches!(&error, HttpError::Meta(_) | HttpError::Body(_)) => {
-                let response = response_templates::error_response(&error);
-                let keep_alive = response.is_keep_alive();
+                let response = error_response_from(&error).add_header("Connection", "close");
                 channel.send_response(response).await?;
-                return Ok(if keep_alive {
-                    ProtocolFlow::Continue
-                } else {
-                    ProtocolFlow::Close
-                });
+                return Ok(ProtocolFlow::Close);
             }
             Err(error) => return Err(error),
         };
-
-        let request_keep_alive = request.is_keep_alive();
+        let keep_alive = request.is_keep_alive();
 
         // 2. Walk URL tree.
         let path = request.meta.path();
         let endpoint = match root.walk_str(&path).await {
             Some(node) => node,
             None => {
-                let error = HttpError::NoRoute(path);
-                let response = response_templates::error_response(&error);
-                let keep_alive = request_keep_alive && response.is_keep_alive();
-                channel.send_response(response).await?;
+                // No route: send 404 and decide based on keep-alive.
+                channel.send_response(not_found_response()).await?;
                 return Ok(if keep_alive {
                     ProtocolFlow::Continue
                 } else {
@@ -221,25 +217,23 @@ where
 
         match endpoint.run(ctx).await {
             Ok(ctx) => {
-                let response = ctx.response;
-                let keep_alive = request_keep_alive && response.is_keep_alive();
-                channel.send_response(response).await?;
+                channel.send_response(ctx.response).await?;
                 Ok(if keep_alive {
                     ProtocolFlow::Continue
                 } else {
                     ProtocolFlow::Close
                 })
             }
-            Err(error) => {
-                let response = response_templates::error_response(&error);
-                let keep_alive = request_keep_alive && response.is_keep_alive();
-                channel.send_response(response).await?;
+            Err(err) if err.can_continue() => {
+                // Recoverable: map error to a response and keep going.
+                channel.send_response(error_response_from(&err)).await?;
                 Ok(if keep_alive {
                     ProtocolFlow::Continue
                 } else {
                     ProtocolFlow::Close
                 })
             }
+            Err(_) => Ok(ProtocolFlow::Close),
         }
     }
 
@@ -294,6 +288,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::message::http_value::StatusCode;
 
     #[test]
     fn test_http1_detection() {
@@ -302,6 +297,12 @@ mod tests {
         assert!(HTTP::detect(b"PUT /resource HTTP/1.1\r\n"));
         assert!(!HTTP::detect(b"INVALID REQUEST\r\n"));
         assert!(!HTTP::detect(b""));
+    }
+
+    #[test]
+    fn test_not_found_response() {
+        let resp = not_found_response();
+        assert_eq!(resp.meta.start_line.status_code(), StatusCode::NOT_FOUND);
     }
 
     #[test]

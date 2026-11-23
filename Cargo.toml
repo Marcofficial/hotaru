@@ -12,6 +12,7 @@ members = [
     
     "hotaru_tls",
     "hotaru_http", 
+    "hotaru_hyper",
     # "hotaru_mqtt",
     "hotaru_lib",
     "ahttpm",
